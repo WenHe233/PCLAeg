@@ -1,0 +1,56 @@
+{
+  "name": "aegisub-launcher",
+  "version": "0.2.0",
+  "description": "Aegisub version isolation and plugin manager",
+  "main": "src/main.cjs",
+  "author": "PCLAeg",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "test:ui": "node tests/ui-smoke.cjs",
+    "test:network": "electron tests/network-smoke.cjs",
+    "build": "electron-builder --win --dir",
+    "build:portable": "electron-builder --win portable",
+    "build:dir": "electron-builder --win --dir",
+    "package:zip": "node scripts/package-zip.cjs"
+  },
+  "dependencies": {
+    "adm-zip": "0.6.1",
+    "jsonc-parser": "3.3.1",
+    "semver": "7.8.5"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3",
+    "playwright": "1.63.0"
+  },
+  "build": {
+    "appId": "com.pclaeg.launcher",
+    "productName": "Aegisub Launcher",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "!src/assets/plugin-library/automation/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "src/assets/plugin-library",
+        "to": "plugin-library"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "src/assets/icon.ico",
+      "signExecutable": false
+    },
+    "portable": {
+      "artifactName": "Aegisub-Launcher-${version}.exe"
+    }
+  }
+}

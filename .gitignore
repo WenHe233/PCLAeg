@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.test-data/
+data/
+rom/
+versions/
+instances/
+cache/
+trash/
+state.json
+state.json.tmp
+launcher-paths.json
+*.log
+.env
+.env.*
