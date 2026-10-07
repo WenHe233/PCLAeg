@@ -9,7 +9,8 @@ if (!fs.existsSync(path.join(source, 'Aegisub Launcher.exe'))) throw new Error('
 const excluded = new Set(['cache', 'versions', 'instances', 'trash', 'state.json', 'state.json.tmp', 'launcher-paths.json']);
 const zip = new AdmZip();
 for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-  if (excluded.has(entry.name) || ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'docs'].includes(entry.name)) continue;
+  if (excluded.has(entry.name) || ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'docs', 'update-manifest.json'].includes(entry.name)) continue;
+  if (!require('../src/updater.cjs').RUNTIME.has(entry.name)) continue;
   const file = path.join(source, entry.name);
   if (entry.isSymbolicLink()) throw new Error('Symlinks are not allowed in the package.');
   if (entry.isDirectory()) zip.addLocalFolder(file, `AegisubLauncher/${entry.name}`);
@@ -17,6 +18,8 @@ for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
 }
 for (const file of ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md']) zip.addLocalFile(path.join(root, file), 'AegisubLauncher');
 zip.addLocalFolder(path.join(root, 'docs'), 'AegisubLauncher/docs');
+const manifest = { schema: 1, version, files: zip.getEntries().filter(e => !e.isDirectory).map(e => ({ path: e.entryName.slice('AegisubLauncher/'.length), sha256: crypto.createHash('sha256').update(e.getData()).digest('hex') })) };
+zip.addFile('AegisubLauncher/update-manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)));
 const forbidden = /^AegisubLauncher\/(?:versions|instances|cache|trash)(?:\/|$)|^AegisubLauncher\/(?:state\.json(?:\.tmp)?|launcher-paths\.json)$/;
 if (zip.getEntries().some(entry => forbidden.test(entry.entryName))) throw new Error('User data found in package.');
 const name = `Aegisub-Launcher-${version}-Windows-x64.zip`;

@@ -4,7 +4,8 @@ const { randomUUID } = require('node:crypto');
 const { Manager } = require('./core.cjs');
 const { resolveStorage, configureStorage, migrateLibrary, relocateLibrary } = require('./storage.cjs');
 const { registerAssociation } = require('./platform.cjs');
-let win, manager, pendingImport;
+const { Updater } = require('./updater.cjs');
+let win, manager, updater, pendingImport;
 let pendingSubtitleFiles = process.argv.filter(arg => /\.(ass|ssa)$/i.test(arg)).map(file => path.resolve(file));
 async function openSubtitles(files) {
   if (!files.length) return;
@@ -31,6 +32,7 @@ else {
     try { if (!process.env.PCLAEG_TEST_ROOT) await migrateLibrary(dataRoot, legacyRoots); }
     catch (e) { dialog.showErrorBox('旧数据迁移失败', e.message); app.quit(); return; }
     manager = new Manager(dataRoot, event => { if (win && !win.isDestroyed()) win.webContents.send('progress', event); }, net.fetch.bind(net));
+    updater = new Updater({ current: app.getVersion(), root: dataRoot, launcherDir: storage.launcherDir, fetcher: net.fetch.bind(net), progress: manager.progress });
     manager.chooseExecutable = async candidates => {
       const result = await dialog.showMessageBox(win, { type: 'question', noLink: true, buttons: ['取消', ...candidates.map(c => `${path.basename(c.path)} · ${c.version || '版本未知'}`)], defaultId: 0, cancelId: 0, message: '发现多个 Aegisub 程序，请选择要启动的版本', detail: candidates.map(c => `${c.relative}  →  ${c.version || '版本未知'}`).join('\n') });
       return result.response === 0 ? null : candidates[result.response - 1]?.path;
@@ -79,7 +81,20 @@ ipcMain.handle('command', async (event, command, args = {}) => {
   try {
     const run = async () => {
       switch (command) {
-        case 'state': return manager.snapshot();
+        case 'state': return { ...manager.snapshot(), launcherVersion: app.getVersion(), updateSupported: app.isPackaged && process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_FILE, updateResult: await updater.lastResult() };
+        case 'updateCheck': return updater.check();
+        case 'updateInstall': {
+          if (!app.isPackaged || process.platform !== 'win32' || process.env.PORTABLE_EXECUTABLE_FILE) throw new Error('一键更新仅支持 Windows 目录版，请下载 ZIP 并解压使用');
+          if (manager.running.size) throw new Error('请先关闭由启动器启动的 Aegisub，再更新');
+          const answer = await dialog.showMessageBox(win, { type: 'question', buttons: ['取消', '更新并重启'], defaultId: 0, cancelId: 0, message: '更新启动器并重启？', detail: '下载并校验官方稳定版，保留实例、配置、插件与数据目录设置。替换失败时恢复旧程序。' });
+          if (answer.response !== 1) return null;
+          const prepared = await updater.prepare(manager.abort?.signal);
+          const { spawn } = require('node:child_process');
+          const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', prepared.worker, '-PlanFile', prepared.planFile], { detached: true, windowsHide: true, stdio: 'ignore', cwd: prepared.job });
+          await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+          child.unref(); setTimeout(() => app.quit(), 800);
+          return { restarting: true, version: prepared.version };
+        }
         case 'cancel': manager.abort?.abort(); return null;
         case 'releases': return manager.releases(args.source);
         case 'install': return manager.installRelease(args.source, args.tag, args.asset, args.name);
@@ -169,7 +184,7 @@ ipcMain.handle('command', async (event, command, args = {}) => {
         default: throw new Error('未知操作');
       }
     };
-    const readOnly = ['state', 'cancel', 'cancelImport', 'releases', 'folder', 'external', 'scanLocal', 'dependencyGraph', 'syncPreview', 'dependencyPlan'].includes(command);
+    const readOnly = ['state', 'updateCheck', 'cancel', 'cancelImport', 'releases', 'folder', 'external', 'scanLocal', 'dependencyGraph', 'syncPreview', 'dependencyPlan'].includes(command);
     return { ok: true, data: await (readOnly ? run() : manager.mutate(run)) };
   } catch (e) { return e.code === 'EXECUTABLE_SELECTION_CANCELLED' ? { ok: true, data: null } : { ok: false, error: e.message }; }
 });

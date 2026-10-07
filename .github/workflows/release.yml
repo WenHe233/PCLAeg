@@ -1,0 +1,70 @@
+name: Build and release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node -e "if(process.env.GITHUB_REF_NAME !== 'v'+require('./package.json').version) throw new Error('Tag and package version differ')"
+      - run: npm run build:dir
+      - name: Verify packaged app
+        run: node tests/package-smoke.cjs
+      - name: Verify executable picker
+        run: node tests/executable-selection-ui-smoke.cjs
+      - name: Verify update UI and dark theme
+        run: node tests/updater-ui-smoke.cjs
+      - run: npm run package:zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            dist/Aegisub-Launcher-*-Windows-x64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'xiaohaiji/PCLAeg'
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          path: dist
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/release-notes.cjs
+          $taskVersion = node -p "require('./package.json').version"
+          $taskTag = "v$taskVersion"
+          gh release view $taskTag --repo $env:GITHUB_REPOSITORY --json tagName 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $taskTag --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title "PCLAeg $taskVersion" --notes-file dist/release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
+          }
+          gh release upload $taskTag "dist/Aegisub-Launcher-$taskVersion-Windows-x64.zip" dist/SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Upload failed; release remains a draft' }
+          gh release edit $taskTag --repo $env:GITHUB_REPOSITORY --draft=false --latest --notes-file dist/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }

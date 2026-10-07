@@ -6,7 +6,7 @@
 
 ## 下载与使用
 
-**[下载 Windows x64 便携版 0.2.0](https://github.com/xiaohaiji/PCLAeg/releases/download/v0.2.0/Aegisub-Launcher-0.2.0-Windows-x64.zip)** · [全部发布版本](https://github.com/xiaohaiji/PCLAeg/releases)
+**[下载 Windows x64 便携版 0.2.1](https://github.com/xiaohaiji/PCLAeg/releases/download/v0.2.1/Aegisub-Launcher-0.2.1-Windows-x64.zip)** · [全部发布版本](https://github.com/xiaohaiji/PCLAeg/releases)
 
 1. 解压 ZIP 到有写入权限的文件夹，运行 `AegisubLauncher/Aegisub Launcher.exe`，无需安装 Node.js。
 2. 在“下载”中安装 Aegisub，或在“版本管理”中导入完整便携目录 / ZIP。也能扫描本机安装，选择后复制为独立实例。
@@ -40,6 +40,10 @@
 
 ### 如何升级？
 
+从 0.2.1 开始，可在“设置 → 检查更新”后点击“一键更新”。更新使用官方稳定版 ZIP，验证 SHA-256 和文件清单，退出后只替换启动器程序并自动重启，保留实例、配置、插件与数据目录设置。替换失败自动恢复旧程序，旧程序备份和结果记录在 `cache/launcher-updates/`。请先关闭正在运行的 Aegisub。仅支持 Windows x64 目录版；开发模式与自解压单文件版请手动升级。
+
+0.2.0 首次升级到 0.2.1 需要手动覆盖一次，之后才能使用一键更新。
+
 关闭启动器和运行中的 Aegisub，备份整个文件夹，再将新包的程序文件覆盖到原文件夹。保留 `versions/`、`cache/`、`state.json` 和自定义 `launcher-paths.json`。不要删除整个旧文件夹后再解压，否则会丢失实例数据。
 
 ### 数据保存在哪里？
@@ -72,6 +76,8 @@ npm.cmd run package:zip
 
 技术栈：Electron + HTML / CSS / JavaScript。文件操作在主进程执行，渲染进程使用隔离的 preload 接口。
 
+GitHub Actions 在推送主分支或提交 PR 时运行测试、构建与打包验证。发布时更新 `package.json`、`package-lock.json` 和 CHANGELOG，提交后推送对应 `v版本号` 标签（例如 `v0.2.1`），工作流自动生成 ZIP 和校验文件，全部上传完成后公开发布。标签必须与包版本一致。无需手动上传下载包。
+
 单元测试覆盖版本识别、存储隔离、插件源、DC 解析、依赖与同步回滚。`tests/` 另有打包 UI 和网络测试，建立独立测试目录；网络测试可能下载、启动测试用 Aegisub。
 
 ## 开源与来源
@@ -84,3 +90,5 @@ npm.cmd run package:zip
 - [unanimated 脚本](https://github.com/TypesettingTools/unanimated-Aegisub-Scripts)
 
 变更记录见 [CHANGELOG](CHANGELOG.md)。反馈问题请提供启动器版本、Aegisub 版本、插件源与复现步骤；日志提交前检查个人路径和信息。
+
+感谢 [WenHe233](https://github.com/WenHe233) 的深色模式与启动文件选择修复（[PR #1](https://github.com/xiaohaiji/PCLAeg/pull/1)、[PR #2](https://github.com/xiaohaiji/PCLAeg/pull/2)）。
