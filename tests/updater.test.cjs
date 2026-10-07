@@ -82,9 +82,10 @@ for (const fail of [false, true]) test(`Windows update worker ${fail ? 'rolls ba
     const child = spawn('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.resolve('src/apply-update.ps1'),'-PlanFile',planFile], { windowsHide: true, stdio: 'pipe' });
     let stderr = ''; child.stderr.on('data', s => stderr += s); child.once('error', reject); child.once('exit', code => stderr ? reject(new Error(stderr)) : resolve(code));
   });
-  assert.equal(code, fail ? 1 : 0);
   const result = JSON.parse((await fs.readFile(path.join(job, 'result.json'), 'utf8')).replace(/^\uFEFF/, ''));
+  assert.equal(code, fail ? 1 : 0, JSON.stringify(result));
   assert.equal(result.status, fail ? 'rolled-back' : 'installed');
+  if (fail) assert.match(result.error, /Missing staged runtime file/);
   assert.equal(await fs.readFile(path.join(target, 'README.md'), 'utf8'), fail ? 'old docs' : 'new docs');
   assert.equal(await fs.readFile(path.join(target, 'state.json'), 'utf8'), 'user state');
   assert.equal(await fs.readFile(path.join(target, 'versions/plugin.lua'), 'utf8'), 'personal plugin');

@@ -1,7 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$PlanFile)
 $ErrorActionPreference = 'Stop'
 $taskPlan = Get-Content -LiteralPath $PlanFile -Raw -Encoding UTF8 | ConvertFrom-Json
-$taskJob = Split-Path -Parent $PlanFile
+$taskJob = [IO.Path]::GetFullPath((Split-Path -Parent $PlanFile))
 $taskDone = [Collections.Generic.List[object]]::new()
 $taskResult = 'failed'
 $taskError = ''
