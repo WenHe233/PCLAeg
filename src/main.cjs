@@ -35,6 +35,14 @@ else {
       const result = await dialog.showMessageBox(win, { type: 'question', noLink: true, buttons: ['取消', ...candidates.map(c => `${path.basename(c.path)} · ${c.version || '版本未知'}`)], defaultId: 0, cancelId: 0, message: '发现多个 Aegisub 程序，请选择要启动的版本', detail: candidates.map(c => `${c.relative}  →  ${c.version || '版本未知'}`).join('\n') });
       return result.response === 0 ? null : candidates[result.response - 1]?.path;
     };
+    manager.browseExecutable = async (root, { sameDirectory }) => {
+      manager.progress({ label: '等待选择 Aegisub 主程序…', percent: null });
+      const result = await chooseFiles({
+        title: sameDirectory ? '未自动识别到 Aegisub，请选择当前主程序所在目录内的 EXE 文件' : '未自动识别到 Aegisub，请选择此实例目录内的主程序。取消将撤销本次安装。',
+        defaultPath: root, properties: ['openFile'], filters: [{ name: '可执行文件', extensions: ['exe'] }]
+      });
+      return result.canceled ? null : result.filePaths[0];
+    };
     try { await manager.init(); } catch (e) { dialog.showErrorBox('数据读取失败', e.message); app.quit(); return; }
     nativeTheme.themeSource = manager.state.preferences.theme;
     win = new BrowserWindow({ width: 1240, height: 820, minWidth: 1000, minHeight: 680, icon: path.join(__dirname, 'assets', 'icon.png'), backgroundColor: '#f3f6fa', title: 'Aegisub Launcher', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -163,5 +171,5 @@ ipcMain.handle('command', async (event, command, args = {}) => {
     };
     const readOnly = ['state', 'cancel', 'cancelImport', 'releases', 'folder', 'external', 'scanLocal', 'dependencyGraph', 'syncPreview', 'dependencyPlan'].includes(command);
     return { ok: true, data: await (readOnly ? run() : manager.mutate(run)) };
-  } catch (e) { return { ok: false, error: e.message }; }
+  } catch (e) { return e.code === 'EXECUTABLE_SELECTION_CANCELLED' ? { ok: true, data: null } : { ok: false, error: e.message }; }
 });

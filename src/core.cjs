@@ -87,6 +87,23 @@ async function findExecutables(dir, depth = 0, maxDepth = 5) {
   }
   return result;
 }
+function cancelledExecutableSelection() {
+  return Object.assign(new Error('已取消版本选择'), { code: 'EXECUTABLE_SELECTION_CANCELLED' });
+}
+async function validateExecutable(root, file, sameDirectory = false) {
+  if (typeof file !== 'string' || !path.isAbsolute(file) || !/\.exe$/i.test(file)) throw new Error('请选择有效的 EXE 文件');
+  const resolved = path.resolve(file);
+  inside(root, resolved);
+  if (sameDirectory && path.relative(root, path.dirname(resolved))) throw new Error('请选择当前主程序所在目录内的 EXE 文件');
+  let stat;
+  try { stat = await fs.lstat(resolved); }
+  catch (error) { if (error.code === 'ENOENT') throw new Error('选择的启动文件不存在'); throw error; }
+  if (!stat.isFile()) throw new Error('请选择普通 EXE 文件，不能选择目录或链接');
+  const realRoot = await fs.realpath(root), realFile = await fs.realpath(resolved);
+  inside(realRoot, realFile);
+  if (sameDirectory && path.relative(realRoot, path.dirname(realFile))) throw new Error('请选择当前主程序所在目录内的 EXE 文件');
+  return { path: resolved, version: await executableVersion(resolved) };
+}
 async function extractZip(zipFile, dest) {
   const zip = new AdmZip(zipFile);
   let total = 0;
@@ -103,7 +120,8 @@ async function extractVersionZip(zipFile, dest, depth = 0) {
   const zip = new AdmZip(zipFile);
   const entries = zip.getEntries();
   const containsExe = entries.some(e => /(^|[\\/])aegisub(?:\d+)?\.exe$/i.test(e.entryName));
-  if (!containsExe && entries.some(e => /(^|[\\/])(CMakeLists\.txt|meson\.build)$/i.test(e.entryName))) throw new Error('这是 Aegisub 源码 ZIP，里面没有可运行的 aegisub.exe。请使用 Windows 便携版 ZIP，不是 Source code 源码包。');
+  const containsAnyExe = entries.some(e => !e.isDirectory && /\.exe$/i.test(e.entryName));
+  if (!containsAnyExe && entries.some(e => /(^|[\\/])(CMakeLists\.txt|meson\.build)$/i.test(e.entryName))) throw new Error('这是 Aegisub 源码 ZIP，里面没有 EXE 程序。请使用 Windows 便携版 ZIP，不是 Source code 源码包。');
   await extractZip(zipFile, dest);
   if (containsExe || depth >= 2) return;
   const nested = entries.filter(e => !e.isDirectory && /(^|[\\/])aegisub[^\\/]*\.zip$/i.test(e.entryName));
@@ -265,17 +283,23 @@ class Manager {
     await writeJSON(configFile, config);
     for (const name of ['autoload', 'include', 'disabled']) await fs.mkdir(path.join(dir, 'automation', 'launcher', name), { recursive: true });
   }
-  async pickExecutable(candidates, root, preferredExe) {
-    if (!candidates.length) throw new Error('没有找到 Aegisub 可执行文件，请选择完整的便携版目录或 ZIP');
+  async pickExecutable(candidates, root, preferredExe, sameDirectory = false) {
     if (preferredExe) {
-      const preferred = candidates.find(c => path.relative(root, c.path) === preferredExe);
-      if (!preferred) throw new Error('原实例的启动文件不存在');
-      return preferred;
+      const preferred = inside(root, path.resolve(root, preferredExe));
+      if (!await exists(preferred)) throw new Error('原实例的启动文件不存在');
+      return validateExecutable(root, preferred, sameDirectory);
+    }
+    if (!candidates.length) {
+      if (!this.browseExecutable) throw new Error('没有找到 Aegisub 可执行文件，请选择完整的便携版目录或 ZIP');
+      if (this.abort?.signal.aborted) throw cancelledExecutableSelection();
+      const selected = await this.browseExecutable(root, { sameDirectory });
+      if (!selected || this.abort?.signal.aborted) throw cancelledExecutableSelection();
+      return validateExecutable(root, selected, sameDirectory);
     }
     if (candidates.length === 1) return candidates[0];
     if (!this.chooseExecutable) throw new Error('目录包含多个 Aegisub，请明确选择要启动的版本');
     const selected = await this.chooseExecutable(candidates.map(c => ({ ...c, relative: path.relative(root, c.path) })));
-    if (!selected) throw new Error('已取消版本选择');
+    if (!selected || this.abort?.signal.aborted) throw cancelledExecutableSelection();
     const result = candidates.find(c => c.path === selected);
     if (!result) throw new Error('选择的启动文件无效');
     return result;
@@ -294,8 +318,9 @@ class Manager {
       await this.portable(exe);
       const item = { id, folder, name: name.trim(), version: source === 'local' ? chosen.version || version : version, executableVersion: chosen.version, source, exe: path.relative(dest, exe), plugins: structuredClone(plugins), created: new Date().toISOString(), lastLaunch: null };
       await this.scanInstance(item);
+      const previousSelected = this.state.selected;
       this.state.instances.push(item); this.state.selected = id;
-      try { await this.save(); } catch (e) { this.state.instances.pop(); throw e; }
+      try { await this.save(); } catch (e) { this.state.instances.pop(); this.state.selected = previousSelected; throw e; }
       return this.snapshot();
     } catch (e) { await fs.rm(dest, { recursive: true, force: true }); throw e; }
   }
@@ -341,7 +366,7 @@ class Manager {
   async changeExecutable(id) {
     this.ensureStopped(id);
     const v = this.instance(id), folder = path.dirname(this.appDir(v));
-    const chosen = await this.pickExecutable(await findExecutables(folder, 0, 0), folder);
+    const chosen = await this.pickExecutable(await findExecutables(folder, 0, 0), folder, undefined, true);
     await this.portable(chosen.path);
     v.exe = path.relative(this.dir(v), chosen.path);
     v.executableVersion = chosen.version;
