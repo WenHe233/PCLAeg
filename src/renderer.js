@@ -189,7 +189,6 @@ document.body.addEventListener('click', async e => {
     }
     if (action === 'release-source-remove') { await task(async()=>{await command('releaseSourceRemove',{source});source='official';releases=null;await fetchReleases();});return; }
     if (action === 'ass-register' || action === 'ass-settings') { await task(()=>command(action === 'ass-register' ? 'assRegister' : 'assSettings',{},action === 'ass-register' ? '已注册，请在 Windows 默认应用中选择 Aegisub Launcher' : undefined));return; }
-    if (action === 'profile-check') { await task(()=>command('profileCheck',{},'恢复点检查完成')); return; }
     if (action === 'profile-restore') { await task(()=>command('profileRestore',{pointId:b.dataset.point},'已回滚配置和插件'));return; }
     if (action === 'profile-sync') {
       if(state.instances.length<2){toast('需要至少两个实例才能同步',true);return;}
@@ -256,6 +255,7 @@ document.body.addEventListener('click', async e => {
       }); return;
     }
     const commands = {
+      'profile-check': ['profileCheck', {}, '恢复点检查完成'],
       select: ['select', { id }], 'change-executable': ['changeExecutable', { id }, '启动文件已更新'], remove: ['remove', { id }, '版本及全部文件已彻底删除'], folder: ['folder', { id }], 'open-instance': ['folder', { id }], 'data-folder': ['folder', {}], 'change-storage': ['changeStorage', {}, '迁移完成，正在重启…'], 'versions-folder': ['folder', { kind: 'versions' }], 'cache-folder': ['folder', { kind: 'cache' }], 'plugin-folder': ['folder', { id, plugins: true }], external: ['external', { url: b.dataset.url }],
       'plugin-scan': ['pluginScan', { id }, '原有插件已扫描'], 'plugin-install': ['pluginInstall', { id, catalogId: b.dataset.catalog }, '插件已安装到当前实例'], 'plugin-toggle': ['pluginToggle', { id, pluginId: b.dataset.plugin }, '插件状态已更新'], 'plugin-remove': ['pluginRemove', { id, pluginId: b.dataset.plugin }, '插件已移除，下次启动生效']
     };
