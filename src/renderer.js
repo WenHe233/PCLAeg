@@ -14,6 +14,7 @@ async function command(name, args = {}, message) {
   if (result.data?.instances) { state = { ...state, ...result.data }; render(); }
   if (result.data?.defaultAssReset) toast('默认打开实例已删除，现已跟随当前选择的实例');
   else if (message && result.data) toast(message);
+  if (name === 'assRegister' || name === 'assSettings') await refreshAssStatus();
   return result.data;
 }
 async function task(fn) {
@@ -188,6 +189,9 @@ document.body.addEventListener('click', async e => {
     if (action === 'launcher-update-check') { await task(async () => { launcherUpdate = await command('updateCheck'); toast(launcherUpdate.available ? `发现新版 ${launcherUpdate.version}` : '当前已经是最新版本'); }); return; }
     if (action === 'launcher-update-install') { await task(() => command('updateInstall',{},'更新已准备完成，正在重启…')); return; }
     if (action === 'theme') { await task(() => command('preference',{key:'theme',value:b.dataset.theme})); return; }
+    if (action === 'ass-default') { await task(() => command('preference', {key:'defaultAss',value:id}, '默认打开实例已保存；首次使用请在设置中完成系统关联')); return; }
+    if (action === 'ass-status') { await refreshAssStatus(); return; }
+    if (action === 'ass-settings-general') { await task(() => command('assSettings', {general:true})); return; }
     if (action === 'scan-local' || action === 'scan-directory') { await task(() => command(action === 'scan-local' ? 'scanLocal' : 'scanDirectory',{},'扫描完成')); return; }
     if (action === 'import-detected') {
       const candidate = state.localVersions.find(v=>v.token===b.dataset.token);
@@ -199,9 +203,7 @@ document.body.addEventListener('click', async e => {
       if(answer) await task(async()=>{const result=await command('releaseSourceAdd',{url:answer.value},'分支已添加');source=result.addedSource;releases=null;await fetchReleases();});return;
     }
     if (action === 'release-source-remove') { await task(async()=>{await command('releaseSourceRemove',{source});source='official';releases=null;await fetchReleases();});return; }
-    if (action === 'ass-default') { await task(() => command('preference', {key:'defaultAss',value:id}, '默认打开实例已保存；首次使用请在设置中完成系统关联')); return; }
-    if (action === 'ass-status') { await refreshAssStatus(); return; }
-    if (['ass-register','ass-settings','ass-settings-general'].includes(action)) { await task(async()=>{await command(action === 'ass-register' ? 'assRegister' : 'assSettings',{general:action==='ass-settings-general'},action === 'ass-register' ? '已注册，请在 Windows 默认应用中选择 Aegisub Launcher' : undefined);await refreshAssStatus();});return; }
+    if (action === 'ass-register' || action === 'ass-settings') { await task(()=>command(action === 'ass-register' ? 'assRegister' : 'assSettings',{},action === 'ass-register' ? '已注册，请在 Windows 默认应用中选择 Aegisub Launcher' : undefined));return; }
     if (action === 'profile-restore') { await task(()=>command('profileRestore',{pointId:b.dataset.point},'已回滚配置和插件'));return; }
     if (action === 'profile-sync') {
       if(state.instances.length<2){toast('需要至少两个实例才能同步',true);return;}
